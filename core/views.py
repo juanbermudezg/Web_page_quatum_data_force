@@ -505,6 +505,7 @@ def chat_api(request):
         f"Columnas relevantes del CSV: {', '.join(CSV_COLUMNS_EXAMPLE)}.\n"
         "Regla de extracción: cuando un usuario pregunte por promedios o generación de auditoría, "
         "necesitamos 'sede' y 'zona' explícitas. Extrae la sede y la zona del texto del usuario si aparecen."
+        "El valor por kwh es de 1200 COP, siempre que tengas valores de KWH calcula el total y mencionalo"
     )
 
     # ----------------------------------------
@@ -939,6 +940,7 @@ def chat_api(request):
     SYSTEM_GENERIC_PROMPT = PRE_PROMPT + "\n\n" + (
         "Eres un asistente experto en consumo energético que debe atenerse a la información proporcionada.\n"
         "REGLAS: No inventes datos operativos; si el usuario requiere promedios o informes y no dio sede/zona, pide que los especifique."
+        ""
     )
 
     try:
