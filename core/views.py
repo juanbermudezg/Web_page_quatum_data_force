@@ -4,7 +4,6 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 import os
 from django.views.decorators.cache import cache_page
-from matplotlib.ticker import MaxNLocator
 
 from openai import OpenAI
 import pandas as pd
@@ -17,11 +16,6 @@ from pathlib import Path
 from django.conf import settings
 from functools import lru_cache
 
-@lru_cache(maxsize=1)
-def load_csv():
-    return pd.read_csv(csv_path, sep=";")
-# views.py (reemplaza / integra en tu archivo)
-
 CSV_PATH = os.environ.get("CSV_PATH")
 
 if CSV_PATH:
@@ -30,10 +24,7 @@ else:
     csv_path = Path(settings.BASE_DIR) / "core" / "static" / "core" / "bbdd_full.csv"
 
 import pandas as pd
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+
 import io, base64
 from datetime import datetime, timedelta
 from django.shortcuts import render
@@ -80,9 +71,25 @@ ZONAS = {
 # multiplicadores para thresholds (ajústalos si quieres)
 TH_WARNING = 1.5
 TH_ALERT = 2.0
+_DF_CACHE = None
+
+def load_csv():
+    global _DF_CACHE
+    if _DF_CACHE is None:
+        _DF_CACHE = pd.read_csv(
+            "core/static/core/bbdd_full.csv", sep=";"
+        )
+    return _DF_CACHE
 
 @cache_page(60 * 10)
 def consumo_energia(request):
+    # =========================
+    # IMPORTS SEGUROS (HEADLESS)
+    # =========================
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
 
     # -------------------------
     # Params
@@ -94,38 +101,52 @@ def consumo_energia(request):
     fecha = request.GET.get("fecha")
     inicio = request.GET.get("inicio")
     fin = request.GET.get("fin")
-    holidays_param = request.GET.get("holidays")
 
     freq = INTERVALOS.get(intervalo_req, "H")
 
     # -------------------------
-    # Leer CSV
+    # Leer CSV (cacheado)
     # -------------------------
     try:
         df = load_csv().copy()
     except Exception as e:
-        return render(request, "core/energia.html", {"error": f"Error leyendo CSV: {e}"})
+        return render(request, "core/energia.html", {
+            "error": f"Error leyendo CSV: {e}"
+        })
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"], dayfirst=True, errors="coerce")
+    # -------------------------
+    # Limpieza básica
+    # -------------------------
+    df["timestamp"] = pd.to_datetime(
+        df["timestamp"], dayfirst=True, errors="coerce"
+    )
     df = df.dropna(subset=["timestamp"])
 
     if "sede" not in df.columns:
-        return render(request, "core/energia.html", {"error": "CSV no contiene columna 'sede'."})
+        return render(request, "core/energia.html", {
+            "error": "CSV no contiene columna 'sede'."
+        })
 
     df = df[df["sede"] == sede]
     if df.empty:
-        return render(request, "core/energia.html", {"error": f"No hay datos para la sede {sede}."})
+        return render(request, "core/energia.html", {
+            "error": f"No hay datos para la sede {sede}."
+        })
 
     min_fecha = df["timestamp"].min()
     max_fecha = df["timestamp"].max()
 
     if zona not in ZONAS or ZONAS[zona] not in df.columns:
-        return render(request, "core/energia.html", {"error": f"Zona inválida: {zona}"})
+        return render(request, "core/energia.html", {
+            "error": f"Zona inválida: {zona}"
+        })
 
     columna = ZONAS[zona]
 
+    # normalizar números latinos
     df[columna] = (
-        df[columna].astype(str)
+        df[columna]
+        .astype(str)
         .str.replace(".", "", regex=False)
         .str.replace(",", ".", regex=False)
     )
@@ -133,80 +154,90 @@ def consumo_energia(request):
     df = df.dropna(subset=[columna])
 
     if df.empty:
-        return render(request, "core/energia.html", {"error": "No hay datos numéricos válidos."})
+        return render(request, "core/energia.html", {
+            "error": "No hay datos numéricos válidos."
+        })
 
     # -------------------------
-    # Interpretar rango
+    # Rango temporal
     # -------------------------
     if modo == "auto":
         inicio_dt, fin_dt = min_fecha, max_fecha
+
     elif modo == "24h":
         fin_dt = max_fecha
         inicio_dt = fin_dt - timedelta(hours=24)
+
     elif modo == "dia":
         if not fecha:
-            return render(request, "core/energia.html", {"error": "Falta fecha."})
+            return render(request, "core/energia.html", {
+                "error": "Falta fecha."
+            })
         dia = pd.to_datetime(fecha, errors="coerce")
         if pd.isna(dia):
-            return render(request, "core/energia.html", {"error": "Fecha inválida."})
+            return render(request, "core/energia.html", {
+                "error": "Fecha inválida."
+            })
         inicio_dt = dia.normalize()
         fin_dt = inicio_dt + timedelta(days=1)
+
     elif modo == "rango":
         inicio_dt = pd.to_datetime(inicio, errors="coerce")
         fin_dt = pd.to_datetime(fin, errors="coerce")
         if pd.isna(inicio_dt) or pd.isna(fin_dt):
-            return render(request, "core/energia.html", {"error": "Rango inválido."})
+            return render(request, "core/energia.html", {
+                "error": "Rango inválido."
+            })
+
     else:
-        return render(request, "core/energia.html", {"error": "Modo inválido."})
+        return render(request, "core/energia.html", {
+            "error": "Modo inválido."
+        })
 
     inicio_dt = max(inicio_dt, min_fecha)
     fin_dt = min(fin_dt, max_fecha)
 
     df = df[(df["timestamp"] >= inicio_dt) & (df["timestamp"] <= fin_dt)]
     if df.empty:
-        return render(request, "core/energia.html", {"error": "No hay datos en el rango."})
+        return render(request, "core/energia.html", {
+            "error": "No hay datos en el rango."
+        })
 
     # -------------------------
-    # Resample base
+    # Serie final
     # -------------------------
     df = df.set_index("timestamp").sort_index()
-    hourly = df[columna].resample("H").sum().to_frame("consumo")
-    if hourly.empty:
-        return render(request, "core/energia.html", {"error": "Sin datos horarios."})
-
-    # -------------------------
-    # Serie final (LIMITADA PARA PLOT)
-    # -------------------------
     serie = df[columna].resample(freq).sum()
 
     full_index = pd.date_range(start=inicio_dt, end=fin_dt, freq=freq)
     serie = serie.reindex(full_index, fill_value=0)
 
-    # 🔒 límite duro de puntos (CRÍTICO)
+    # 🔒 límite duro de puntos (CRÍTICO EN PROD)
     MAX_POINTS = 500
     if len(serie) > MAX_POINTS:
-        step = len(serie) // MAX_POINTS
+        step = max(1, len(serie) // MAX_POINTS)
         serie_plot = serie.iloc[::step]
     else:
         serie_plot = serie
 
     # -------------------------
-    # Plot seguro para producción
+    # Plot SEGURO
     # -------------------------
     fig, ax = plt.subplots(figsize=(12, 4))
 
-    ax.plot(serie_plot.index, serie_plot.values, linewidth=1, label="Consumo")
+    ax.plot(
+        serie_plot.index,
+        serie_plot.values,
+        linewidth=1,
+        label="Consumo"
+    )
 
-    ax.xaxis.set_major_locator(MaxNLocator(8))
+    locator = mdates.AutoDateLocator(maxticks=8)
+    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_formatter(
+        mdates.ConciseDateFormatter(locator)
+    )
 
-    if freq == "H":
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %H:%M"))
-    elif freq == "D":
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    else:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
-
-    plt.xticks(rotation=45, ha="right")
     ax.set_ylabel("kWh")
     ax.set_title(f"{sede} · {zona} · {modo}")
     ax.grid(True, axis="y", alpha=0.3)
@@ -216,7 +247,12 @@ def consumo_energia(request):
     # Export imagen
     # -------------------------
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=140)
+    fig.savefig(
+        buf,
+        format="png",
+        dpi=120,
+        bbox_inches="tight"
+    )
     plt.close(fig)
 
     buf.seek(0)
