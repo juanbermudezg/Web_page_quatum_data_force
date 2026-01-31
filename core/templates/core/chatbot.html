@@ -1,0 +1,21 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% block title %}Chatbot{% endblock %}
+{% block content %}
+<h1>Chatbot</h1>
+
+<div id="chatBox" class="border rounded p-3 mb-3" style="height:300px; overflow:auto;">
+  <div id="messages"></div>
+</div>
+
+<form id="chatForm">
+  <div class="input-group">
+    <input id="msgInput" type="text" class="form-control" placeholder="Escribe tu mensaje..." required>
+    <button class="btn btn-primary" type="submit">Enviar</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'core/chatbot.js' %}"></script>
+{% endblock %}
