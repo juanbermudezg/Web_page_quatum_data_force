@@ -1,6 +1,128 @@
 {% extends 'core/base.html' %}
+{% load static %}
 {% block title %}Inicio - Mi Proyecto{% endblock %}
+
 {% block content %}
-<h1>Bienvenido</h1>
-<p>Página de inicio. Aquí un resumen rápido.</p>
+<div class="container mt-4">
+
+    <!-- TÍTULO PRINCIPAL -->
+    <h1 class="mb-3">Bienvenido</h1>
+    <p class="text-muted">
+        Plataforma de análisis energético basada en modelos predictivos e históricos.
+    </p>
+
+    <hr>
+
+    <!-- ================= MODELOS ================= -->
+    <section class="mt-4">
+        <h2>Modelos desarrollados</h2>
+        <div class="row mt-3">
+
+            <!-- Modelo 1 -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <img src="{% static 'core/mapa.jpeg' %}" class="card-img-top" alt="Mapa de calor energético">
+                    <div class="card-body">
+                        <h5 class="card-title">Modelo de Predicción Energética</h5>
+                        <p class="card-text">
+                            Cada celda del mapa de calor indica, en kilovatios-hora (kWh), qué tan cerca están las predicciones de la realidad histórica (2018-2025). Las zonas más claras demuestran una alta fiabilidad y consistencia en el comportamiento energético de esos sectores. Por el contrario, los tonos más oscuros o rojos señalan áreas con mayor variabilidad, como los laboratorios o comedores; indicando la detección de anomalías, ya que  permite identificar de inmediato qué puntos críticos de la universidad presentan consumos erráticos que requieren una intervención u optimización urgente para reducir la huella de carbono.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 2 -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <img src="{% static 'core/analisis.jpeg' %}" class="card-img-top" alt="Detección de anomalías">
+                    <div class="card-body">
+                        <h5 class="card-title">Modelo de Detección de Anomalías</h5>
+                        <p class="card-text">
+                            Este gráfico SHAP permite identificar por medio del modelo que la ocupación de los sectores y las condiciones térmicas externas son los factores que más desplazan el ritmo del consumo en la UPTC. Al observar cómo los puntos rojos, es decir los valores altos,se agrupan a la derecha del eje cero, validando estadísticamente que el modelo ha aprendido correctamente la correlación entre la afluencia de estudiantes y el gasto energético. Permitiendo asegurar que las alertas de ahorro no son arbitrarias, sino que están justificadas por variables físicas reales, permitiendo a los administradores de cada sede entender la causa raíz de cada predicción y tomar acciones basadas en evidencia para reducir la huella de carbono.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ================= MAPA DE CALOR ================= -->
+    <section class="mt-4">
+        <h2>Interpretación del mapa de calor</h2>
+        <div class="row align-items-center mt-3">
+
+            <div class="col-md-6">
+                <p>
+                    Cada celda del mapa de calor indica, en <strong>kilovatios-hora (kWh)</strong>,
+                    qué tan cerca están las predicciones de la realidad histórica (2018–2025).
+                </p>
+                <p>
+                    Las zonas más claras demuestran una <strong>alta fiabilidad y consistencia</strong>
+                    en el comportamiento energético de esos sectores.
+                </p>
+                <p>
+                    Por el contrario, los tonos más oscuros o rojos señalan áreas con
+                    <strong>mayor variabilidad</strong>, como los laboratorios o comedores,
+                    indicando la detección de anomalías.
+                </p>
+                <p>
+                    Esto permite identificar de inmediato los puntos críticos de la universidad
+                    que requieren una intervención u optimización urgente para
+                    <strong>reducir la huella de carbono</strong>.
+                </p>
+            </div>
+
+            <div class="col-md-6">
+                <img src="{% static 'core/mapa.jpeg' %}" 
+                     class="img-fluid rounded shadow"
+                     alt="Mapa de calor energético general">
+            </div>
+
+        </div>
+    </section>
+
+    <hr>
+
+    <!-- ================= EQUIPO ================= -->
+    <section class="mt-4">
+        <h2>Equipo de desarrollo</h2>
+        <div class="row mt-3">
+
+            <!-- Programador 1 -->
+            <div class="col-md-3 text-center mb-4">
+      
+                <h6>Juan Alberto Velazquez</h6>
+                <p class="text-muted">Machine Learning</p>
+            </div>
+
+            <!-- Programador 2 -->
+            <div class="col-md-3 text-center mb-4">
+
+                <h6>David Tinjaca</h6>
+                <p class="text-muted">Backend & Data</p>
+            </div>
+
+            <!-- Programador 3 -->
+            <div class="col-md-3 text-center mb-4">
+
+                <h6>Paula Andrea Alba Bernal</h6>
+                <p class="text-muted">Mi nombre es Paula Andrea Alba Bernal, tengo 24 años, soy Ingeniera electrónica, me gradué en 2025 de la Universidad San Buenaventura sede Bogotá.
+Tengo interés en la inteligencia artificial y la automatización, he trabajado en proyectos de análisis de imágenes y redes neuronales convolucionales, aplicados a problemas reales en el área de telecomunicaciones.
+Me considero una persona proactiva, responsable y con muchas ganas de seguir aprendiendo y aportar soluciones innovadoras.</p>
+            </div>
+
+            <!-- Programador 4 -->
+            <div class="col-md-3 text-center mb-4">
+
+                <h6>Juan Andrés Bermúdez Gómez</h6>
+                <p class="text-muted">Ingeniero Aeronáutico de 21 años, interesado en creación de modelos de IA y desarrollo de aplicaciones web (Python-Django), trabajo como Analyst I en Accelya Colombia.
+                    Experiencia en investigación con participación en congresos de México, Argentina y Colombia ante Universidad Aeronáutica en Querétaro, Universidad Nacional de la Plata, Fuerza Aeroespacial Colombiana y Escuela de Aviación del Ejército. Co autor de capitulo de libro Gestión Tecnológica e Innovación en el Campo Aeroespacial, del sello editorial EMAVI.
+                </p>
+            </div>
+
+        </div>
+    </section>
+
+</div>
 {% endblock %}

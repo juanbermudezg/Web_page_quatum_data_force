@@ -89,7 +89,7 @@ def consumo_energia(request):
     # Leer CSV
     # -------------------------
     try:
-        df = pd.read_csv(CSV_PATH, sep=";")
+        df = pd.read_csv(csv_path, sep=";")
     except Exception as e:
         return render(request, "core/energia.html", {"error": f"Error leyendo CSV: {e}"})
 
@@ -373,7 +373,7 @@ def consumo_energia(request):
 # Configuración OpenAI
 # =========================
 client = OpenAI(
-    api_key=os.environ.get("API")
+    api_key=os.environ.get("API", "sk-")
 )
 
 SYSTEM_PROMPT = """
