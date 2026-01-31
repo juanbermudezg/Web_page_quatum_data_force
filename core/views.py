@@ -72,19 +72,20 @@ TH_ALERT = 2.0
 
 @cache_page(60 * 10)
 def consumo_energia(request):
+
     # -------------------------
     # Params
     # -------------------------
     sede = request.GET.get("sede", "Tunja")
     zona = request.GET.get("zona", "total")
-    modo = request.GET.get("modo", "auto")   # auto | 24h | dia | rango
+    modo = request.GET.get("modo", "auto")
     intervalo_req = request.GET.get("intervalo", "h")
-    fecha = request.GET.get("fecha")         # para modo=dia (YYYY-MM-DD)
+    fecha = request.GET.get("fecha")
     inicio = request.GET.get("inicio")
     fin = request.GET.get("fin")
-    holidays_param = request.GET.get("holidays")  # opcional: "2025-12-25,2026-01-01"
+    holidays_param = request.GET.get("holidays")
 
-    freq = INTERVALOS.get(intervalo_req, "h")  # pandas freq en mayúscula
+    freq = INTERVALOS.get(intervalo_req, "H")
 
     # -------------------------
     # Leer CSV
@@ -94,30 +95,24 @@ def consumo_energia(request):
     except Exception as e:
         return render(request, "core/energia.html", {"error": f"Error leyendo CSV: {e}"})
 
-    # convertir timestamps
     df["timestamp"] = pd.to_datetime(df["timestamp"], dayfirst=True, errors="coerce")
     df = df.dropna(subset=["timestamp"])
 
-    # filtrar sede
-    if "sede" in df.columns:
-        df = df[df["sede"] == sede]
-    else:
+    if "sede" not in df.columns:
         return render(request, "core/energia.html", {"error": "CSV no contiene columna 'sede'."})
 
+    df = df[df["sede"] == sede]
     if df.empty:
         return render(request, "core/energia.html", {"error": f"No hay datos para la sede {sede}."})
 
     min_fecha = df["timestamp"].min()
     max_fecha = df["timestamp"].max()
 
-    # columna seleccionada
-    if zona not in ZONAS:
+    if zona not in ZONAS or ZONAS[zona] not in df.columns:
         return render(request, "core/energia.html", {"error": f"Zona inválida: {zona}"})
-    columna = ZONAS[zona]
-    if columna not in df.columns:
-        return render(request, "core/energia.html", {"error": f"Columna {columna} no encontrada."})
 
-    # normalizar números latinos
+    columna = ZONAS[zona]
+
     df[columna] = (
         df[columna].astype(str)
         .str.replace(".", "", regex=False)
@@ -125,238 +120,99 @@ def consumo_energia(request):
     )
     df[columna] = pd.to_numeric(df[columna], errors="coerce")
     df = df.dropna(subset=[columna])
+
     if df.empty:
-        return render(request, "core/energia.html", {"error": "No hay datos numéricos en la columna seleccionada."})
+        return render(request, "core/energia.html", {"error": "No hay datos numéricos válidos."})
 
     # -------------------------
-    # Interpretar rango solicitado
+    # Interpretar rango
     # -------------------------
     if modo == "auto":
-        inicio_dt = min_fecha
-        fin_dt = max_fecha
+        inicio_dt, fin_dt = min_fecha, max_fecha
     elif modo == "24h":
-        fin_dt = df["timestamp"].max()
+        fin_dt = max_fecha
         inicio_dt = fin_dt - timedelta(hours=24)
     elif modo == "dia":
         if not fecha:
-            return render(request, "core/energia.html", {"error": "Para modo=dia debes enviar fecha=YYYY-MM-DD."})
+            return render(request, "core/energia.html", {"error": "Falta fecha."})
         dia = pd.to_datetime(fecha, errors="coerce")
         if pd.isna(dia):
-            return render(request, "core/energia.html", {"error": "Fecha inválida para modo=dia."})
-        inicio_dt = dia.replace(hour=0, minute=0, second=0, microsecond=0)
-        fin_dt = dia.replace(hour=23, minute=59, second=59, microsecond=999999)
+            return render(request, "core/energia.html", {"error": "Fecha inválida."})
+        inicio_dt = dia.normalize()
+        fin_dt = inicio_dt + timedelta(days=1)
     elif modo == "rango":
-        if not (inicio and fin):
-            return render(request, "core/energia.html", {"error": "Para modo=rango debes enviar inicio y fin."})
         inicio_dt = pd.to_datetime(inicio, errors="coerce")
         fin_dt = pd.to_datetime(fin, errors="coerce")
         if pd.isna(inicio_dt) or pd.isna(fin_dt):
-            return render(request, "core/energia.html", {"error": "Fechas inicio/fin inválidas."})
+            return render(request, "core/energia.html", {"error": "Rango inválido."})
     else:
-        return render(request, "core/energia.html", {"error": f"Modo inválido: {modo}"})
+        return render(request, "core/energia.html", {"error": "Modo inválido."})
 
-    if inicio_dt > fin_dt:
-        inicio_dt, fin_dt = fin_dt, inicio_dt
-
-    # recortar al dataset
-    if inicio_dt < min_fecha:
-        inicio_dt = min_fecha
-    if fin_dt > max_fecha:
-        fin_dt = max_fecha
+    inicio_dt = max(inicio_dt, min_fecha)
+    fin_dt = min(fin_dt, max_fecha)
 
     df = df[(df["timestamp"] >= inicio_dt) & (df["timestamp"] <= fin_dt)]
     if df.empty:
-        return render(request, "core/energia.html", {"error": "No hay datos en el rango seleccionado."})
+        return render(request, "core/energia.html", {"error": "No hay datos en el rango."})
 
     # -------------------------
-    # Resample base para análisis de secciones:
-    # siempre resample hourly para definir secciones homogéneas
+    # Resample base
     # -------------------------
     df = df.set_index("timestamp").sort_index()
-    hourly = df[columna].resample("h").sum().to_frame(name="consumo")
+    hourly = df[columna].resample("H").sum().to_frame("consumo")
     if hourly.empty:
-        return render(request, "core/energia.html", {"error": "No hay datos horarios para la ventana seleccionada."})
+        return render(request, "core/energia.html", {"error": "Sin datos horarios."})
 
     # -------------------------
-    # Detectar vacaciones (holidays)
+    # Serie final (LIMITADA PARA PLOT)
     # -------------------------
-    holidays_set = set()
-    if pyholidays is not None:
-        try:
-            # intenta con Colombia por defecto (ajusta country si quieres)
-            hols = pyholidays.CountryHoliday("CO", years=range(min_fecha.year, max_fecha.year+1))
-            holidays_set = set(hols.keys())
-        except Exception:
-            holidays_set = set()
-    # si pasaron holidays por parámetro, únelos
-    if holidays_param:
-        for s in holidays_param.split(","):
-            try:
-                d = pd.to_datetime(s.strip(), errors="coerce").date()
-                if not pd.isna(d):
-                    holidays_set.add(d)
-            except Exception:
-                pass
-
-    # -------------------------
-    # Dividir día en 4 secciones
-    # 0: 00-06, 1: 06-12, 2: 12-18, 3: 18-24
-    # -------------------------
-    def section_from_hour(h):
-        if 0 <= h < 6:
-            return "00-06"
-        if 6 <= h < 12:
-            return "06-12"
-        if 12 <= h < 18:
-            return "12-18"
-        return "18-24"
-
-    # añadir columnas para clasificación
-    hourly = hourly.reset_index()
-    hourly["date"] = hourly["timestamp"].dt.date
-    hourly["hour"] = hourly["timestamp"].dt.hour
-    hourly["weekday"] = hourly["timestamp"].dt.weekday  # 0-6
-    hourly["day_type"] = hourly["date"].apply(
-        lambda d: "holiday" if d in holidays_set else ("weekend" if pd.Timestamp(d).weekday() >= 5 else "weekday")
-    )
-    hourly["section"] = hourly["hour"].apply(section_from_hour)
-
-    # -------------------------
-    # Calcular promedios por (day_type, section)
-    # -------------------------
-    stats = hourly.groupby(["day_type", "section"])["consumo"].mean().unstack(fill_value=0)
-    # stats is a dataframe indexed by day_type with columns section labels
-
-    # construir diccionarios de promedios y thresholds
-    promedio = {}
-    umbrales = {}
-    for dt in ["weekday", "weekend", "holiday"]:
-        promedio[dt] = {}
-        umbrales[dt] = {}
-        for sec in ["00-06","06-12","12-18","18-24"]:
-            mean_val = float(stats.loc[dt, sec]) if (dt in stats.index and sec in stats.columns) else 0.0
-            promedio[dt][sec] = mean_val
-            umbrales[dt][sec] = {
-                "warning": mean_val * TH_WARNING if mean_val > 0 else None,
-                "alert": mean_val * TH_ALERT if mean_val > 0 else None
-            }
-
-    # -------------------------
-    # Construir la serie final según freq pedido por el usuario
-    # -------------------------
-    # Resample a la frecuencia solicitada (freq, que ya está en 'H','D','W','M')
     serie = df[columna].resample(freq).sum()
 
-    # rellenar índice completo para ventana elegida
-    try:
-        full_index = pd.date_range(start=inicio_dt, end=fin_dt, freq=freq)
-    except Exception:
-        full_index = pd.date_range(start=inicio_dt, end=fin_dt, freq="H")
-        freq = "H"
-
+    full_index = pd.date_range(start=inicio_dt, end=fin_dt, freq=freq)
     serie = serie.reindex(full_index, fill_value=0)
 
-    # -------------------------
-    # Detectar violaciones (alerts) en la serie mostrada
-    # para cada punto, determinar su sección y day_type (weekday/weekend/holiday)
-    # -------------------------
-    alerts = []  # lista de dicts para el template
-    alert_mask = []  # boolean mask para marcar puntos en el plot
-
-    for ts, val in serie.items():
-        d = ts.date()
-        h = ts.hour
-        sec = section_from_hour(h)
-        if d in holidays_set:
-            dt_type = "holiday"
-        elif ts.weekday() >= 5:
-            dt_type = "weekend"
-        else:
-            dt_type = "weekday"
-
-        th = umbrales.get(dt_type, {}).get(sec, {})
-        alert_thr = th.get("alert") if th else None
-        warn_thr = th.get("warning") if th else None
-
-        breached = False
-        level = None
-        if alert_thr and val > alert_thr:
-            breached = True
-            level = "ALERTA"
-        elif warn_thr and val > warn_thr:
-            breached = True
-            level = "WARNING"
-
-        alert_mask.append(breached)
-        if breached:
-            alerts.append({
-                "timestamp": ts.isoformat(),
-                "value": float(val),
-                "level": level,
-                "threshold": alert_thr if level == "ALERTA" else warn_thr,
-                "day_type": dt_type,
-                "section": sec
-            })
+    # 🔒 límite duro de puntos (CRÍTICO)
+    MAX_POINTS = 500
+    if len(serie) > MAX_POINTS:
+        step = len(serie) // MAX_POINTS
+        serie_plot = serie.iloc[::step]
+    else:
+        serie_plot = serie
 
     # -------------------------
-    # Graficar: serie + markers para alerts + líneas de threshold por sección (opcional)
+    # Plot seguro para producción
     # -------------------------
-    plt.figure(figsize=(12, 4))
-    ax = plt.gca()
-    ax.xaxis.set_major_locator(plt.MaxNLocator(10))
-    plt.xticks(rotation=45, ha="right")
+    fig, ax = plt.subplots(figsize=(12, 4))
 
-    serie.plot(ax=ax, linewidth=1, label="Consumo")
+    ax.plot(serie_plot.index, serie_plot.values, linewidth=1, label="Consumo")
 
-    # marcar alerts con puntos rojos
-    xs = [ts for ts, b in zip(serie.index, alert_mask) if b]
-    ys = [serie.loc[ts] for ts in xs]
-    if xs:
-        ax.scatter(xs, ys, color="red", s=40, zorder=5, label="Alerta")
+    ax.xaxis.set_major_locator(MaxNLocator(8))
 
-    # opcional: dibujar línea de warning/alert promedio global por sección
-    # (dibujamos una banda para cada sección en el rango actual)
-    # para simplicidad, dibujamos líneas horizontales por sección usando promedio weekday (si existe)
-    for sec in ["00-06","06-12","12-18","18-24"]:
-        # usamos threshold de weekday como referencia visual (si existe)
-        w = umbrales["weekday"][sec]["warning"]
-        a = umbrales["weekday"][sec]["alert"]
-        if w:
-            ax.axhline(y=w, color="orange", linestyle="--", linewidth=0.8, alpha=0.6)
-        if a:
-            ax.axhline(y=a, color="red", linestyle=":", linewidth=0.6, alpha=0.6)
-
-    # formateo eje X según freq
     if freq == "H":
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %H:%M"))
     elif freq == "D":
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    elif freq == "W":
-        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
     else:
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
 
     plt.xticks(rotation=45, ha="right")
-    plt.ylabel("kWh")
-    plt.title(f"{sede} · {zona} · {modo}")
+    ax.set_ylabel("kWh")
+    ax.set_title(f"{sede} · {zona} · {modo}")
     ax.grid(True, axis="y", alpha=0.3)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
     ax.legend()
 
-    plt.tight_layout()
+    # -------------------------
+    # Export imagen
+    # -------------------------
     buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=150)
-    plt.close("all")
+    fig.savefig(buf, format="png", dpi=140)
+    plt.close(fig)
+
     buf.seek(0)
-    graphic = base64.b64encode(buf.getvalue()).decode()
+    graphic = base64.b64encode(buf.read()).decode()
 
     # -------------------------
-    # Contexto para template
+    # Context
     # -------------------------
     context = {
         "grafico": graphic,
@@ -366,10 +222,8 @@ def consumo_energia(request):
         "intervalo": freq,
         "min_fecha": min_fecha.isoformat(),
         "max_fecha": max_fecha.isoformat(),
-        "promedio": promedio,      # dict day_type -> section -> mean
-        "umbrales": umbrales,      # dict day_type -> section -> {warning, alert}
-        "alerts": alerts,          # lista de alertas detectadas en la ventana
     }
+
     return render(request, "core/energia.html", context)
 
 
