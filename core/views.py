@@ -3,10 +3,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 import os
+from django.views.decorators.cache import cache_page
 
 from openai import OpenAI
 import pandas as pd
-import matplotlib.pyplot as plt
 import io
 import base64
 from django.shortcuts import render
@@ -70,6 +70,7 @@ ZONAS = {
 TH_WARNING = 1.5
 TH_ALERT = 2.0
 
+@cache_page(60 * 10)
 def consumo_energia(request):
     # -------------------------
     # Params
@@ -302,6 +303,9 @@ def consumo_energia(request):
     # -------------------------
     plt.figure(figsize=(12, 4))
     ax = plt.gca()
+    ax.xaxis.set_major_locator(plt.MaxNLocator(10))
+    plt.xticks(rotation=45, ha="right")
+
     serie.plot(ax=ax, linewidth=1, label="Consumo")
 
     # marcar alerts con puntos rojos
@@ -347,7 +351,7 @@ def consumo_energia(request):
     plt.tight_layout()
     buf = io.BytesIO()
     plt.savefig(buf, format="png", dpi=150)
-    plt.close()
+    plt.close("all")
     buf.seek(0)
     graphic = base64.b64encode(buf.getvalue()).decode()
 
