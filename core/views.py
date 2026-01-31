@@ -519,12 +519,20 @@ def chat_api(request):
     # ----------------------------------------
     # CSV candidate paths (prioridad)
     # ----------------------------------------
-    CSV_CANDIDATES = [
-        globals().get("CSV_PATH"),  # si está definido en el módulo
-        "/mnt/data/bbdd_full.csv",
-        r"D:\Documents\Hackathon_Indra\Web_page_quatum_data_force\Quantum_DataForce\core\static\core\bbdd_full.csv",
-    ]
-    CSV_CANDIDATES = [p for p in CSV_CANDIDATES if p]
+    CSV_CANDIDATES = []
+
+    # 1. Desde variable de entorno (PRIORIDAD)
+    csv_env = os.environ.get("CSV_PATH")
+    if csv_env:
+        CSV_CANDIDATES.append(Path(settings.BASE_DIR) / csv_env)
+
+    # 2. Fallback controlado (opcional, pero válido)
+    CSV_CANDIDATES.append(
+        Path(settings.BASE_DIR) / "core" / "data" / "bbdd_full.csv"
+    )
+
+    # Filtrar solo los que existen
+    CSV_CANDIDATES = [p for p in CSV_CANDIDATES if p.exists()]
 
     # ----------------------------------------
     # Helpers
