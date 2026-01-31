@@ -12,9 +12,11 @@ import base64
 from django.shortcuts import render
 from django.http import JsonResponse
 from datetime import datetime
+from pathlib import Path
+from django.conf import settings
 
 # views.py (reemplaza / integra en tu archivo)
-CSV_PATH = r"D:\Documents\Hackathon_Indra\Web_page_quatum_data_force\Quantum_DataForce\core\static\core\bbdd_full.csv"
+csv_path = Path(settings.BASE_DIR) / "core" / "static" / "core" / "bbdd_full.csv"
 
 import pandas as pd
 import matplotlib
@@ -371,7 +373,7 @@ def consumo_energia(request):
 # Configuración OpenAI
 # =========================
 client = OpenAI(
-    api_key="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"
+    api_key=os.environ.get("API")
 )
 
 SYSTEM_PROMPT = """
