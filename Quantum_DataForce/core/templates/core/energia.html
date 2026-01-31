@@ -1,0 +1,94 @@
+{% extends "core/base.html" %}
+{% block content %}
+
+<h2>Consumo de Energía</h2>
+
+<form method="get" action="{% url 'core:consumo_energia' %}" class="row g-3 mb-4">
+  <div class="col-md-3">
+    <label>Sede</label>
+    <input name="sede" value="{{ sede|default:'Tunja' }}" class="form-control"/>
+  </div>
+
+  <div class="col-md-3">
+    <label>Zona</label>
+    <select name="zona" class="form-control">
+      <option value="total" {% if zona == "total" %}selected{% endif %}>Total</option>
+      <option value="comedor" {% if zona == "comedor" %}selected{% endif %}>Comedor</option>
+      <option value="salones" {% if zona == "salones" %}selected{% endif %}>Salones</option>
+      <option value="laboratorios" {% if zona == "laboratorios" %}selected{% endif %}>Laboratorios</option>
+      <option value="auditorios" {% if zona == "auditorios" %}selected{% endif %}>Auditorios</option>
+      <option value="oficinas" {% if zona == "oficinas" %}selected{% endif %}>Oficinas</option>
+    </select>
+  </div>
+
+  <div class="col-md-2">
+    <label>Modo</label>
+    <select name="modo" class="form-control">
+      <option value="auto" {% if modo == 'auto' %}selected{% endif %}>Auto (dataset)</option>
+      <option value="24h" {% if modo == '24h' %}selected{% endif %}>Últimas 24 horas</option>
+      <option value="dia" {% if modo == 'dia' %}selected{% endif %}>Día específico</option>
+      <option value="rango" {% if modo == 'rango' %}selected{% endif %}>Rango</option>
+    </select>
+  </div>
+
+  <div class="col-md-2">
+    <label>Intervalo</label>
+    <select name="intervalo" class="form-control">
+      <option value="h" {% if intervalo == 'h' %}selected{% endif %}>Hora</option>
+      <option value="D" {% if intervalo == 'D' %}selected{% endif %}>Día</option>
+      <option value="W" {% if intervalo == 'W' %}selected{% endif %}>Semana</option>
+      <option value="MS" {% if intervalo == 'MS' %}selected{% endif %}>Mes</option>
+    </select>
+  </div>
+
+  <div class="col-md-2 d-flex align-items-end">
+    <button class="btn btn-primary w-100">Ver gráfico</button>
+  </div>
+
+  <!-- Si usas datepickers, puedes rellenar con min/max -->
+  <input type="hidden" id="min_fecha" value="{{ min_fecha }}">
+  <input type="hidden" id="max_fecha" value="{{ max_fecha }}">
+</form>
+
+{% if error %}
+  <div class="alert alert-warning">{{ error }}</div>
+{% endif %}
+
+{% if grafico %}
+  <img src="data:image/png;base64,{{ grafico }}" class="img-fluid"/>
+  {% if alerts %}
+  <div class="alert alert-danger mt-3">
+    <h5>Alertas detectadas ({{ alerts|length }})</h5>
+    <ul>
+      {% for a in alerts %}
+        <li>
+          <strong>{{ a.level }}</strong> - {{ a.timestamp }} - {{ a.value|floatformat:2 }} kWh -
+          {{ a.day_type }} - sección {{ a.section }} -
+          umbral: {{ a.threshold|default:"N/A"|floatformat:2 }}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<h5>Promedios por sección</h5>
+<table class="table table-sm">
+  <thead><tr><th>Tipo</th><th>00-06</th><th>06-12</th><th>12-18</th><th>18-24</th></tr></thead>
+  <tbody>
+    {% for tipo, tramos in promedio.items %}
+<tr>
+  <td>{{ tipo }}</td>
+  <td>{{ tramos.madrugada|floatformat:1 }}</td>
+  <td>{{ tramos.mañana|floatformat:1 }}</td>
+  <td>{{ tramos.tarde|floatformat:1 }}</td>
+  <td>{{ tramos.noche|floatformat:1 }}</td>
+</tr>
+{% endfor %}
+
+  </tbody>
+</table>
+
+{% endif %}
+
+
+{% endblock %}
