@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 import os
 from django.views.decorators.cache import cache_page
+from matplotlib.ticker import MaxNLocator
 
 from openai import OpenAI
 import pandas as pd
@@ -14,9 +15,19 @@ from django.http import JsonResponse
 from datetime import datetime
 from pathlib import Path
 from django.conf import settings
+from functools import lru_cache
 
+@lru_cache(maxsize=1)
+def load_csv():
+    return pd.read_csv(csv_path, sep=";")
 # views.py (reemplaza / integra en tu archivo)
-csv_path = Path(settings.BASE_DIR) / "core" / "static" / "core" / "bbdd_full.csv"
+
+CSV_PATH = os.environ.get("CSV_PATH")
+
+if CSV_PATH:
+    csv_path = Path(CSV_PATH)
+else:
+    csv_path = Path(settings.BASE_DIR) / "core" / "static" / "core" / "bbdd_full.csv"
 
 import pandas as pd
 import matplotlib
@@ -91,7 +102,7 @@ def consumo_energia(request):
     # Leer CSV
     # -------------------------
     try:
-        df = pd.read_csv(csv_path, sep=";")
+        df = load_csv().copy()
     except Exception as e:
         return render(request, "core/energia.html", {"error": f"Error leyendo CSV: {e}"})
 
