@@ -277,28 +277,6 @@ def consumo_energia(request):
 # =========================
 # Configuración OpenAI
 # =========================
-client = OpenAI(
-    api_key=os.environ.get("API", "sk-")
-)
-
-SYSTEM_PROMPT = """
-Eres un auditor energético experto en la norma ISO 50001.
-
-REGLAS ESTRICTAS:
-- No inventes datos.
-- No hagas cálculos numéricos.
-- Usa únicamente la información proporcionada en el contexto.
-- Si falta sede o zona para responder una pregunta de consumo, debes pedir que se especifiquen.
-- Cuando se solicite un “informe de auditoría”, responde en formato estructurado con:
-  1. Métodos
-  2. Métricas
-  3. Hallazgos
-  4. Anomalías
-  5. Recomendaciones
-  6. Conclusión
-- Redacta con lenguaje técnico acorde a ISO 50001.
-
-"""
 
 
 # =========================
@@ -321,6 +299,29 @@ def chatbot_page(request):
 # =========================
 @csrf_exempt
 def chat_api(request):
+    client = OpenAI(
+    api_key=os.environ.get("API", "sk-")
+)
+
+    SYSTEM_PROMPT = """
+Eres un auditor energético experto en la norma ISO 50001.
+
+REGLAS ESTRICTAS:
+- No inventes datos.
+- No hagas cálculos numéricos.
+- Usa únicamente la información proporcionada en el contexto.
+- Si falta sede o zona para responder una pregunta de consumo, debes pedir que se especifiquen.
+- Cuando se solicite un “informe de auditoría”, responde en formato estructurado con:
+  1. Métodos
+  2. Métricas
+  3. Hallazgos
+  4. Anomalías
+  5. Recomendaciones
+  6. Conclusión
+- Redacta con lenguaje técnico acorde a ISO 50001.
+
+"""
+
     """
     Endpoint POST
     Recibe JSON:
@@ -509,17 +510,14 @@ def chat_api(request):
                 pass
 
         # 2) intentar rutas del servidor
-        for path in CSV_CANDIDATES:
-            try:
-                if path and os.path.exists(path):
-                    # intentar con varios separadores automáticamente
-                    with open(path, "rb") as f:
-                        raw = f.read()
-                    df_try = _try_read_csv_bytes(raw)
-                    if df_try is not None:
-                        return df_try
-            except Exception:
-                continue
+        
+        # intentar con varios separadores automáticamente
+        with open(CSV_PATH, "rb") as f:
+            raw = f.read()
+        df_try = _try_read_csv_bytes(raw)
+        if df_try is not None:
+            return df_try
+    
 
         # 3) not found
         return None
